@@ -1,0 +1,16 @@
+{
+  "CARDINAL": [
+    "two",
+    "three",
+    "one"
+  ],
+  "ORDINAL": [
+    "first"
+  ],
+  "DATE": [
+    "saturday"
+  ],
+  "NORP": [
+    "indians"
+  ]
+}
