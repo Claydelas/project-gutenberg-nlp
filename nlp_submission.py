@@ -26,62 +26,80 @@ logger = logging.getLogger( __name__ )
 logging.basicConfig( level=logging.INFO, format=LOG_FORMAT )
 logger.info('logging started')
 
-def get_tagged_sentences(ontonotes:dict, max_sentences:int = 25000):
-	tagged_sentences = []
-	for sentences in ontonotes.values():
-		for sentence in sentences.values():
-			if len(tagged_sentences) >= max_sentences: return tagged_sentences
-			if 'XX' in sentence.get('pos'):
-				continue
-			if 'VERB' in sentence.get('pos'):
-				continue
-			tokens = sentence.get('tokens')
-			pos = sentence.get('pos')
-			entities = sentence.get('ne')
-			if entities and 'parse_error' not in entities.keys():
-				tagged_sentence = []
-				for token in range(len(tokens)):
-					entity = None
-					for ne in entities.values():
-						if token in ne.get('tokens'):
-							entity = ne
-							break
-					if entity is None:
-						tagged_sentence.append((tokens[token], pos[token], 'O'))
-					else:
-						tokens_arr = entity.get('tokens')
-						tag = entity.get('type')
-						if len(tokens_arr) == 1:
-							tagged_sentence.append((tokens[token], pos[token], tag + "-S"))
-						elif token == tokens_arr[0]:
-							tagged_sentence.append((tokens[token], pos[token], tag + "-B"))
-						elif token == tokens_arr[-1]:
-							tagged_sentence.append((tokens[token], pos[token], tag + "-E"))
-						else:
-							tagged_sentence.append((tokens[token], pos[token], tag + "-I"))
-				if tagged_sentence: tagged_sentences.append(tagged_sentence)
-	return tagged_sentences
+def get_tagged_sentences(ontonotes: dict, max_sentences: int = 25000):
+    tagged_sentences = []
+    for sentences in ontonotes.values():
+        for sentence in sentences.values():
+            if len(tagged_sentences) >= max_sentences: return tagged_sentences
+            if 'XX' in sentence.get('pos'):
+                continue
+            if 'VERB' in sentence.get('pos'):
+                continue
+            tokens = sentence.get('tokens')
+            pos = sentence.get('pos')
+            entities = sentence.get('ne')
+            if entities and 'parse_error' not in entities.keys():
+                tagged_sentence = []
+                for token in range(len(tokens)):
+                    entity = None
+                    for ne in entities.values():
+                        if token in ne.get('tokens'):
+                            entity = ne
+                            break
+                    if entity is None:
+                        tagged_sentence.append(
+                            (tokens[token], pos[token], 'O'))
+                    else:
+                        tokens_arr = entity.get('tokens')
+                        tag = entity.get('type')
+                        if len(tokens_arr) == 1:
+                            tagged_sentence.append(
+                                (tokens[token], pos[token], tag + "-S"))
+                        elif token == tokens_arr[0]:
+                            tagged_sentence.append(
+                                (tokens[token], pos[token], tag + "-B"))
+                        elif token == tokens_arr[-1]:
+                            tagged_sentence.append(
+                                (tokens[token], pos[token], tag + "-E"))
+                        else:
+                            tagged_sentence.append(
+                                (tokens[token], pos[token], tag + "-I"))
+                if tagged_sentence: tagged_sentences.append(tagged_sentence)
+    return tagged_sentences
+
 
 def sent2features(sent):
-	return [word2features(sent, i) for i in range(len(sent))]
+    return [word2features(sent, i) for i in range(len(sent))]
+
 
 def sent2labels(sent):
-	return [label for token, postag, label in sent]
+    return [label for token, postag, label in sent]
+
 
 def sent2tokens(sent):
-	return [token for token, postag, label in sent]
+    return [token for token, postag, label in sent]
 
-def print_F1_scores( micro_F1 ) :
-	for label in micro_F1 :
-		logger.info( "%-15s -> f1 %0.2f ; prec %0.2f ; recall %0.2f" % ( label, micro_F1[label]['f1-score'], micro_F1[label]['precision'], micro_F1[label]['recall'] ) )
 
-def print_transitions(trans_features):
-	for (label_from, label_to), weight in trans_features:
-		logger.info( "%-15s -> %-15s %0.6f" % (label_from, label_to, weight) )
+ORDINAL_WORDS_NUMBER_RE = r'(?:first|second|third|th)\s*$'
+ 
+CARDINAL_NUMBER_RE = r'^\s*(?:[+-]?)(?=\d|\.\d)\d*(?:\.\d*)?(?:[Ee](?:[+-]?\d+))?\s*'
+ 
+ORDINAL_NUMBER_RE  = r'^\s*(?:[+-]?)(?=\d|\.\d)\d*(?:\.\d*)?(?:[Ee](?:[+-]?\d+))?(?:st|nd|rd|th)\s*$'
 
-def print_state_features(state_features):
-	for (attr, label), weight in state_features:
-		logger.info( "%0.6f %-15s %s" % (weight, label, attr) )
+def isordinal(word):
+    if re.match(ORDINAL_NUMBER_RE, word) or re.match(ORDINAL_WORDS_NUMBER_RE, word):
+        return True
+ 
+    return False
+
+def iscardinal(word):
+    if re.match(CARDINAL_NUMBER_RE, word):
+        return True
+
+    return False;
+
+wnpos = lambda e: ('a' if e[0].lower() == 'j' else e[0].lower()) if e[0].lower() in ['n', 'r', 'v'] else 'n'
+wn = nltk.stem.WordNetLemmatizer()
 
 def word2features(sent, i):
     word = sent[i][0]
@@ -95,111 +113,123 @@ def word2features(sent, i):
         'word.istitle()': word.istitle(),
         'word.isdigit()': word.isdigit(),
         'postag': postag,
-        'postag[:2]': postag[:2],
+        'word.lemma': wn.lemmatize(word.lower(), wnpos(postag))
+        
     }
     if i > 0:
-        word1 = sent[i-1][0]
-        postag1 = sent[i-1][1]
+        word1 = sent[i - 1][0]
+        postag1 = sent[i - 1][1]
         features.update({
             '-1:word.lower()': word1.lower(),
             '-1:word.istitle()': word1.istitle(),
             '-1:word.isupper()': word1.isupper(),
             '-1:postag': postag1,
-            '-1:postag[:2]': postag1[:2],
         })
     else:
         features['BOS'] = True
 
-    if i < len(sent)-1:
-        word1 = sent[i+1][0]
-        postag1 = sent[i+1][1]
+    if i < len(sent) - 1:
+        word1 = sent[i + 1][0]
+        postag1 = sent[i + 1][1]
         features.update({
             '+1:word.lower()': word1.lower(),
             '+1:word.istitle()': word1.istitle(),
             '+1:word.isupper()': word1.isupper(),
             '+1:postag': postag1,
-            '+1:postag[:2]': postag1[:2],
+            
         })
     else:
         features['EOS'] = True
 
     return features
 
+
+def load_dataset(ontonotes_file, max_sentences=25000):
+    # load parsed ontonotes dataset
+    dataset = codecs.open(ontonotes_file, 'r', 'utf-8',
+                          errors='replace').read()
+    ontonotes = json.loads(dataset)
+    return get_tagged_sentences(ontonotes, max_sentences)
+
+
+def extract_entities(model, chapter):
+	chapter = codecs.open(chapter, 'r', 'utf-8',
+                      errors='replace').read()
+	chapter = re.sub(r'\r\n', ' ', chapter)
+	chapter = re.sub(r'[’‘]', ' ', chapter)
+
+	chapter_sents = nltk.sent_tokenize(chapter)
+	chapter_word_tokens = [nltk.word_tokenize(sent) for sent in chapter_sents]
+
+	pos_tags = [nltk.pos_tag(word) for word in chapter_word_tokens]
+	features = [sent2features(s) for s in pos_tags]
+	ner_tags = model.predict(features)
+
+	ents = []
+	for i, ne in enumerate(ner_tags):
+	    sentence = [word.lower() for word in chapter_word_tokens[i]]
+	    pos_tag = [y for x, y in pos_tags[i]]
+	    ents.append(list(zip(sentence, pos_tag, ne)))
+	ents_clean = [
+	    x for x in [[tup for tup in s if tup[2] not in ['O']] for s in ents] if x
+	]
+	return [item for sublist in ents_clean for item in sublist]
+
+
+def chunk_entities(entities):
+	chunked = []
+	for entity_idx in range(len(entities)):
+	    flat_ent = ['', '', '']
+	    if entities[entity_idx][2].endswith('-B'):
+	        flat_ent[0] = entities[entity_idx][0]
+	        flat_ent[1] = entities[entity_idx][1]
+	        flat_ent[2] = re.sub('-B$', '', entities[entity_idx][2])
+	        i = entity_idx + 1
+	        while i < len(entities) and (entities[i][2].endswith('-I')
+	                                     or entities[i][2].endswith('-E')):
+	            flat_ent[0] = flat_ent[0] + ' ' + entities[i][0]
+	            flat_ent[1] = flat_ent[1] + ' ' + entities[i][1]
+	            i += 1
+	        if (flat_ent[0], flat_ent[2]) in [(x[0], x[2]) for x in chunked]:
+	            continue
+	        chunked.append(tuple(flat_ent))
+	    if entities[entity_idx][2].endswith('-S'):
+	        flat_ent[0] = entities[entity_idx][0]
+	        flat_ent[1] = entities[entity_idx][1]
+	        flat_ent[2] = re.sub('-S$', '', entities[entity_idx][2])
+	        if (flat_ent[0], flat_ent[2]) in [(x[0], x[2]) for x in chunked]:
+	            continue
+	        chunked.append(tuple(flat_ent))
+	return chunked
+
 def exec_ner( file_chapter = None, ontonotes_file = None ) :
 
 	# INSERT CODE TO TRAIN A CRF NER MODEL TO TAG THE CHAPTER OF TEXT (subtask 3)
-	display_label_subset = [ 'CARDINAL', 'ORDINAL', 'DATE', 'NORP', 'PERSON' ]
-	# load parsed ontonotes dataset
-	dataset = codecs.open(ontonotes_file, 'r', 'utf-8', errors = 'replace').read()
-	ontonotes = json.loads(dataset)
 
-	sentences = get_tagged_sentences(ontonotes)
+	sentences = load_dataset(ontonotes_file = ontonotes_file, max_sentences = 10000)
 	
-	train, test = sklearn.model_selection.train_test_split(sentences, test_size=0.2)
-
-	X_train = [sent2features(s) for s in train]
-	y_train = [sent2labels(s) for s in train]
-
-	X_test = [sent2features(s) for s in test]
-	y_test = [sent2labels(s) for s in test]
-
-	# get the label set
-	set_labels = set([])
-	for data in [y_train,y_test] :
-		for n_sent in range(len(data)) :
-			for str_label in data[n_sent] :
-				set_labels.add( str_label )
-	labels = list( set_labels )
-	logger.info( '' )
-	logger.info( 'labels = ' + repr(labels) )
-	labels.remove('O')
+	X_train = [sent2features(s) for s in sentences]
+	y_train = [sent2labels(s) for s in sentences]
 
 	crf = sklearn_crfsuite.CRF(
 		algorithm='lbfgs',
-		c1=0.1,
-		c2=0.1,
-		max_iterations=20,
+		c1=0.04100687805893257,
+		c2=0.039222512020706174,
+		max_iterations=100,
 		all_possible_transitions=True,
 	)
-
 	crf.fit(X_train, y_train)
-	# compute the macro F1 score (F1 for instances of each label class averaged) in the test set
-	y_pred = crf.predict( X_test )
-	sorted_labels = sorted(
-		labels, 
-		key=lambda name: (name[1:], name[0])
-	)
-	macro_scores = sklearn_crfsuite.metrics.flat_classification_report( y_test, y_pred, labels=sorted_labels, digits=3, output_dict = True )
-	logger.info( '' )
-	logger.info( 'macro F1 scores'  )
-	print_F1_scores( macro_scores )
-	print()
-	
 
 	# USING NER MODEL AND REGEX GENERATE A SET OF BOOK CHARACTERS AND FILTERED SET OF NE TAGS (subtask 4)
+	entities = extract_entities(crf, file_chapter)
+	chunked_entities = chunk_entities(entities)
 
-	# hardcoded output to show exactly what is expected to be serialized (you should change this)
 	dictNE = {
-			"CARDINAL": [
-				"two",
-				"three",
-				"one"
-			],
-			"ORDINAL": [
-				"first"
-			],
-			"DATE": [
-				"saturday",
-			],
-			"NORP": [
-				"indians"
-			],
-			"PERSON": [
-				"creakle",
-				"mr. creakle",
-				"mrs. creakle",
-				"miss creakle"
-			]
+			"CARDINAL": [e[0] for e in chunked_entities if e[2] == 'CARDINAL'],
+			"ORDINAL": [e[0] for e in chunked_entities if e[2] == 'ORDINAL'],
+			"DATE": [e[0] for e in chunked_entities if e[2] == 'DATE'],
+			"NORP": [e[0] for e in chunked_entities if e[2] == 'NORP'],
+			"PERSON": [e[0] for e in chunked_entities if e[2] == 'PERSON']
 		}
 
 	# DO NOT CHANGE THE BELOW CODE WHICH WILL SERIALIZE THE ANSWERS FOR THE AUTOMATED TEST HARNESS TO LOAD AND MARK
