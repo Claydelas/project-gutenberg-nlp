@@ -36,7 +36,8 @@ def get_tagged_sentences(ontonotes: dict, max_sentences: int = 25000):
             if 'VERB' in sentence.get('pos'):
                 continue
             tokens = sentence.get('tokens')
-            pos = sentence.get('pos')
+            #pos = sentence.get('pos')
+            pos = [tag[1] for tag in nltk.pos_tag(tokens)]
             entities = sentence.get('ne')
             if entities and 'parse_error' not in entities.keys():
                 tagged_sentence = []
@@ -261,9 +262,107 @@ def exec_regex_toc( file_book = None ) :
 	# INSERT CODE TO USE REGEX TO BUILD A TABLE OF CONTENTS FOR A BOOK (subtask 1)
 	text = codecs.open(file_book,"r",encoding="utf-8-sig").read()
 
-	chapters = re.findall(r'(?<=\s)^CHAPTER.*(?=\r)' ,text, flags=re.MULTILINE)
-	r = re.compile(r'(\d+)(?:\.?)(.*)') # CHAPTER 1. XXXXXXXXXXXXXXX
-	dictTOC = {re.search(r, chapter).group(1):re.search(r, chapter).group(2).strip() for chapter in chapters}
+	# toc = re.search(r'(?<=Contents)(?:\r\n)*([\s\S]*?)(?:\r*\n){3}', text, re.IGNORECASE).group(1)
+	# text_no_toc = re.sub(toc, "", text)
+	# toc = toc.split('\r\n')
+	# toc = [t for t in toc if t]
+	# for line in toc:
+	# 	heading = re.search(r'[^.]+$', line).group(0).strip()
+	# 	pattern = re.compile(f'(?<=\r\n).*{heading}', re.IGNORECASE)
+	# 	match = re.search(pattern, text_no_toc)
+	# 	if match:
+	# 		print(match.group(0))
+
+	# Form 1: Chapter I, Chapter 1, Chapter the First, CHAPTER 1
+	# Ways of enumerating chapters, e.g.
+	arabicNumerals = '\d+'
+	romanNumerals = '(?=[MDCLXVI])M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})'
+	numbers1_9 = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
+	numbers10_19 = ['ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen']
+	numberWordsByTens = ['twenty', 'thirty', 'forty', 'fifty', 'sixty',
+	                      'seventy', 'eighty', 'ninety']
+	numbers_hyph = [f'{x}-{y}' for x in numberWordsByTens for y in numbers1_9]
+	numbers_space = [f'{x} {y}' for x in numberWordsByTens for y in numbers1_9]
+	numberWords = numbers_hyph + numbers_space + numberWordsByTens + numbers10_19 + numbers1_9
+	numberWordsPat = '(' + '|'.join(numberWords) + ')'
+
+	ordinalNumberWordsByTens = ['twentieth', 'thirtieth', 'fortieth', 'fiftieth', 
+	                            'sixtieth', 'seventieth', 'eightieth', 'ninetieth']
+	ordinalNumberWords = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 
+	                      'seventh', 'eighth', 'ninth', 'twelfth', 'last'] + \
+	                     [numberWord + 'th' for numberWord in numbers10_19] + ordinalNumberWordsByTens
+	ordinalsPat = '(the )?(' + '|'.join(ordinalNumberWords) + ')'
+	enumeratorsList = [arabicNumerals, romanNumerals, numberWordsPat, ordinalsPat] 
+	enumerators = '(' + '|'.join(enumeratorsList) + ')'
+	separators = '(?:\. ?| ?)'
+	form1 = '(?: *\*?)chapter ' + enumerators + separators
+
+	# Form 2: II. The Mail
+	enumerators = romanNumerals
+	separators = '(\. | )'
+	titleCase = '[A-Z][a-z]'
+	form2 = enumerators + separators + titleCase
+
+	# Form 3: II. THE OPEN ROAD
+	enumerators = romanNumerals
+	separators = '(\. )'
+	titleCase = '[A-Z][A-Z]'
+	form3 = enumerators + separators + titleCase
+
+	# Form 4: a number on its own, e.g. 8, VIII
+	arabicNumerals = '^\d+\.?$'
+	romanNumerals = '(?=[MDCLXVI])M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})\.?$'
+	enumeratorsList = [arabicNumerals, romanNumerals]
+	enumerators = '(' + '|'.join(enumeratorsList) + ')'
+	form4 = enumerators
+
+	pat = re.compile(form1, re.IGNORECASE)
+	# This one is case-sensitive.
+	pat2 = re.compile('(%s|%s|%s)' % (form2, form3, form4))
+	
+	headings = []
+	text_split = text.split('\r\n')
+	flag = None
+	for i, line in enumerate(text_split):
+		if (flag is None or flag == 0) and pat.match(line) is not None:
+			m = pat.match(line)
+			heading = text_split[i][m.span()[1]:]
+			if heading and heading != '*':
+				headings.append((m.group(1), heading.strip()))
+			elif i+1 <= len(text_split) and text_split[i+1]:
+				if i+2 <= len(text_split) and text_split[i+2]:
+					headings.append((m.group(1), text_split[i+1].strip() + ' ' + text_split[i+2].strip()))
+				else: headings.append((m.group(1), text_split[i+1].strip()))
+			elif i+2 <= len(text_split) and text_split[i+2]:
+				if i+3 <= len(text_split) and text_split[i+3]:
+					headings.append((m.group(1), text_split[i+2].strip() + ' ' + text_split[i+3].strip()))
+				else: headings.append((m.group(1), text_split[i+2].strip()))
+			else: continue
+			flag = 0
+		elif (flag is None or flag == 1) and pat2.match(line) is not None:
+			m = pat2.match(line)
+			heading = text_split[i][m.span()[1]:]
+			if heading and heading != '*':
+				headings.append((m.group(1), heading.strip()))
+			elif i+1 <= len(text_split) and text_split[i+1]:
+				if i+2 <= len(text_split) and text_split[i+2]:
+					headings.append((m.group(1), text_split[i+1].strip() + ' ' + text_split[i+2].strip()))
+				else: headings.append((m.group(1), text_split[i+1].strip()))
+			elif i+2 <= len(text_split) and text_split[i+2]:
+				if i+3 <= len(text_split) and text_split[i+3]:
+					headings.append((m.group(1), text_split[i+2].strip() + ' ' + text_split[i+3].strip()))
+				else: headings.append((m.group(1), text_split[i+2].strip()))
+			else: continue
+			flag = 1
+
+	headings_final = []
+	headings_num = []
+	for heading in reversed(headings):
+		if heading[0] not in headings_num:
+			headings_final.append(heading)
+			headings_num.append(heading[0])
+
+	dictTOC = {heading[0]:heading[1] for heading in reversed(headings_final)}
 
 	# DO NOT CHANGE THE BELOW CODE WHICH WILL SERIALIZE THE ANSWERS FOR THE AUTOMATED TEST HARNESS TO LOAD AND MARK
 
@@ -280,7 +379,7 @@ def exec_regex_questions( file_chapter = None ) :
 
 	#questions = re.findall(r'[A-Z][^.?!]*\?', clean)
 	questions = re.findall(r'[A-Z][^.?!]*\?', clean)
-	questions = [re.sub(r'.*\s‘', '', q) for q in questions]
+	questions = [re.sub(r'.*\s‘', '', q).strip() for q in questions]
 
 	setQuestions = set(questions)
 
