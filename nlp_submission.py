@@ -110,29 +110,12 @@ def word2features(sent, i):
         'bias': 1.0,
         'word.lower()': word.lower(),
         'word[-3:]': word[-3:],
-        'word[-2:]': word[-2:],
-        'word[:2]': word[:2],
         'word.isupper()': word.isupper(),
         'word.istitle()': word.istitle(),
-        'word.isdigit()': word.isnumeric(),
+        'word.isdigit()': word.isdigit(),
         'postag': postag,
-        'word.lemma': wn.lemmatize(word.lower(), wnpos(postag)),
-        'postag[:2]': postag[:2],
-        
+        'word.lemma': wn.lemmatize(word.lower(), wnpos(postag))
     }
-    if re.search('^[^A-Za-z0-9.,!-\'\"?]', word):
-        features.update({
-            'word:issymbol': True
-        })
-    if isordinal(word):
-        features.update({
-            'word:isordinal': True
-        })
-    if iscardinal(word):
-        features.update({
-            'word:iscardinal': True
-        })
-            
     if i > 0:
         word1 = sent[i - 1][0]
         postag1 = sent[i - 1][1]
@@ -141,15 +124,7 @@ def word2features(sent, i):
             '-1:word.istitle()': word1.istitle(),
             '-1:word.isupper()': word1.isupper(),
             '-1:postag': postag1,
-            '-1:word[-3:]': word1[-3:],
-            '-1:word[-2:]': word1[-2:],
-            '-1:word[:2]': word1[:2],
-            '-1:postag[:2]': postag1[:2],
         })
-        if re.search(r'.*\.', word1):
-            features.update({
-                '-1:word:title': True
-            })
     else:
         features['BOS'] = True
 
@@ -161,10 +136,6 @@ def word2features(sent, i):
             '+1:word.istitle()': word1.istitle(),
             '+1:word.isupper()': word1.isupper(),
             '+1:postag': postag1,
-            '+1:word[-3:]': word1[-3:],
-            '+1:word[-2:]': word1[-2:],
-            '+1:word[:2]': word1[:2],
-            '+1:postag[:2]': postag1[:2],
         })
     else:
         features['EOS'] = True
@@ -241,8 +212,8 @@ def exec_ner( file_chapter = None, ontonotes_file = None ) :
 
     crf = sklearn_crfsuite.CRF(
         algorithm='lbfgs',
-        c1=0.2,
-        c2=0.05,
+        c1=0.04100687805893257,
+		c2=0.039222512020706174,
         max_iterations=100,
         all_possible_transitions=True,
     )
@@ -289,8 +260,6 @@ def exec_regex_toc( file_book = None ) :
     # INSERT CODE TO USE REGEX TO BUILD A TABLE OF CONTENTS FOR A BOOK (subtask 1)
     text = codecs.open(file_book,"r",encoding="utf-8").read()
 
-    # Form 1: Chapter I, Chapter 1, Chapter the First, CHAPTER 1
-    # Ways of enumerating chapters, e.g.
     arabicNumerals = '\d+'
     romanNumerals = '(?=[MDCLXVI])M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})'
     numbers1_9 = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
@@ -301,85 +270,38 @@ def exec_regex_toc( file_book = None ) :
     numbers_space = [f'{x} {y}' for x in numberWordsByTens for y in numbers1_9]
     numberWords = numbers_hyph + numbers_space + numberWordsByTens + numbers10_19 + numbers1_9
     numberWordsPat = '(' + '|'.join(numberWords) + ')'
-
     ordinalNumberWordsByTens = ['twentieth', 'thirtieth', 'fortieth', 'fiftieth', 
                                 'sixtieth', 'seventieth', 'eightieth', 'ninetieth']
     ordinalNumberWords = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 
                           'seventh', 'eighth', 'ninth', 'twelfth', 'last'] + \
                          [numberWord + 'th' for numberWord in numbers10_19] + ordinalNumberWordsByTens
     ordinalsPat = '(the )?(' + '|'.join(ordinalNumberWords) + ')'
-    alphabetic = r'[A-Z]'
-    enumeratorsList = [arabicNumerals, romanNumerals, numberWordsPat, ordinalsPat, alphabetic] 
+    enumeratorsList = [arabicNumerals, romanNumerals, numberWordsPat, ordinalsPat] 
     enumerators = '(' + '|'.join(enumeratorsList) + ')'
-    separators = r'(?:\.+ *| *)'
-    form1 = r'(?: *\**)chapter +' + enumerators + separators
-
-    # Form 2: II. The Mail
-    enumerators = romanNumerals
-    separators = '(\. | )'
-    titleCase = '[A-Z][a-z]'
-    form2 = enumerators + separators + titleCase
-
-    # Form 3: II. THE OPEN ROAD
-    enumerators = romanNumerals
-    separators = '(\. )'
-    titleCase = '[A-Z][A-Z]'
-    form3 = enumerators + separators + titleCase
-
-    # Form 4: a number on its own, e.g. 8, VIII
-    arabicNumerals = '^\d+\.?$'
-    romanNumerals = '(?=[MDCLXVI])M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})\.?$'
-    enumeratorsList = [arabicNumerals, romanNumerals]
-    enumerators = '(' + '|'.join(enumeratorsList) + ')'
-    form4 = enumerators
-
-    pat = re.compile(form1, re.IGNORECASE)
-    # This one is case-sensitive.
-    pat2 = re.compile('(%s|%s|%s)' % (form2, form3, form4))
+    chap = r'(?: *\**)chapter +' + enumerators + r'(?:\.+ *|-+ *|—+ *| *)*'
+    pat = re.compile(chap, re.IGNORECASE)
     
-    headings = []
     text_split = text.split('\r\n')
-    flag = None
+    def patch_chapter(c, title):
+        while c+1 <= len(text_split) and text_split[c+1]:
+            title = title + ' ' + text_split[c+1].strip()
+            c += 1
+        return title
+
+    headings = []
     for i, line in enumerate(text_split):
-        if (flag is None or flag == 0) and pat.match(line) is not None:
+        if i-1 >= 0 and not text_split[i-1] and pat.match(line) is not None: # previous line is empty and current line matches
             m = pat.match(line)
             heading = text_split[i][m.span()[1]:]
-            if heading and heading != '*':
-                headings.append((m.group(1), heading.strip()))
-            elif i+1 <= len(text_split) and text_split[i+1]:
-                if i+2 <= len(text_split) and text_split[i+2]:
-                    headings.append((m.group(1), text_split[i+1].strip() + ' ' + text_split[i+2].strip()))
-                else: headings.append((m.group(1), text_split[i+1].strip()))
-            elif i+2 <= len(text_split) and text_split[i+2]:
-                if i+3 <= len(text_split) and text_split[i+3]:
-                    headings.append((m.group(1), text_split[i+2].strip() + ' ' + text_split[i+3].strip()))
-                else: headings.append((m.group(1), text_split[i+2].strip()))
-            else: headings.append((m.group(1), ''))
-            flag = 0
-        elif (flag is None or flag == 1) and pat2.match(line) is not None:
-            m = pat2.match(line)
-            heading = text_split[i][m.span()[1]:]
-            if heading and heading != '*':
-                headings.append((m.group(1), heading.strip()))
-            elif i+1 <= len(text_split) and text_split[i+1]:
-                if i+2 <= len(text_split) and text_split[i+2]:
-                    headings.append((m.group(1), text_split[i+1].strip() + ' ' + text_split[i+2].strip()))
-                else: headings.append((m.group(1), text_split[i+1].strip()))
-            elif i+2 <= len(text_split) and text_split[i+2]:
-                if i+3 <= len(text_split) and text_split[i+3]:
-                    headings.append((m.group(1), text_split[i+2].strip() + ' ' + text_split[i+3].strip()))
-                else: headings.append((m.group(1), text_split[i+2].strip()))
-            else: headings.append((m.group(1), ''))
-            flag = 1
+            if heading and heading != '*': # Chapter X SOMETHING
+                headings.append((m.group(1), patch_chapter(i, heading.strip())))
+            elif i+1 <= len(text_split) and text_split[i+1]: # Chapter X \n SOMETHING
+                headings.append((m.group(1), patch_chapter(i+1, text_split[i+1].strip())))
+            elif i+2 <= len(text_split) and text_split[i+2]: # Chapter X \n\n SOMETHING
+                headings.append((m.group(1), patch_chapter(i+2, text_split[i+2].strip())))
+            else: headings.append((m.group(1), '')) # Chapter X NO_TITLE
 
-    headings_final = []
-    headings_num = []
-    for heading in reversed(headings):
-        if heading[0] not in headings_num:
-            headings_final.append(heading)
-            headings_num.append(heading[0])
-
-    dictTOC = {heading[0]:heading[1] for heading in reversed(headings_final)}
+    dictTOC = {heading[0]:heading[1] for heading in headings}
 
     # DO NOT CHANGE THE BELOW CODE WHICH WILL SERIALIZE THE ANSWERS FOR THE AUTOMATED TEST HARNESS TO LOAD AND MARK
 
