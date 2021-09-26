@@ -8,9 +8,104 @@
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "David Copperfield",
+            "type": "python",
+            "request": "launch",
             "program": "nlp_submission.py",
             "console": "integratedTerminal",
-            "args": ["ontonotes_parsed.json", "eval_book.txt", "eval_chapter.txt"]
+            "args": [
+                "ontonotes_parsed.json",
+                "eval_book.txt",
+                "eval_chapter.txt"
+            ]
+        },
+        {
+            "name": "Dracula",
+            "type": "python",
+            "request": "launch",
+            "program": "nlp_submission.py",
+            "console": "integratedTerminal",
+            "args": [
+                "ontonotes_parsed.json",
+                "eval_book1.txt",
+                "eval_chapter.txt"
+            ]
+        },
+        {
+            "name": "Oliver Twist",
+            "type": "python",
+            "request": "launch",
+            "program": "nlp_submission.py",
+            "console": "integratedTerminal",
+            "args": [
+                "ontonotes_parsed.json",
+                "eval_book2.txt",
+                "eval_chapter.txt"
+            ]
+        },
+        {
+            "name": "The Young Trawler",
+            "type": "python",
+            "request": "launch",
+            "program": "nlp_submission.py",
+            "console": "integratedTerminal",
+            "args": [
+                "ontonotes_parsed.json",
+                "eval_book3.txt",
+                "eval_chapter.txt"
+            ]
+        },
+        {
+            "name": "The Mystery Hunters at the Haunted Lodge",
+            "type": "python",
+            "request": "launch",
+            "program": "nlp_submission.py",
+            "console": "integratedTerminal",
+            "args": [
+                "ontonotes_parsed.json",
+                "eval_book4.txt",
+                "eval_chapter.txt"
+            ]
+        },
+        {
+            "name": "Miss Esperance and Mr Wycherly",
+            "type": "python",
+            "request": "launch",
+            "program": "nlp_submission.py",
+            "console": "integratedTerminal",
+            "args": [
+                "ontonotes_parsed.json",
+                "eval_book5.txt",
+                "eval_chapter.txt"
+            ]
+        },
+        {
+            "name": "The Dominant Strain",
+            "type": "python",
+            "request": "launch",
+            "program": "nlp_submission.py",
+            "console": "integratedTerminal",
+            "args": [
+                "ontonotes_parsed.json",
+                "eval_book6.txt",
+                "eval_chapter.txt"
+            ]
+        },
+        {
+            "name": "The Pickwick Papers",
+            "type": "python",
+            "request": "launch",
+            "program": "nlp_submission.py",
+            "console": "integratedTerminal",
+            "args": [
+                "ontonotes_parsed.json",
+                "eval_book7.txt",
+                "eval_chapter.txt"
+            ]
         }
     ]
 }

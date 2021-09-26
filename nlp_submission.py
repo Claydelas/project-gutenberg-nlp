@@ -30,14 +30,14 @@ def get_tagged_sentences(ontonotes: dict, max_sentences: int = 25000):
     tagged_sentences = []
     for sentences in ontonotes.values():
         for sentence in sentences.values():
-            if len(tagged_sentences) >= max_sentences: return tagged_sentences
-            if 'XX' in sentence.get('pos'):
+            if len(tagged_sentences) >= max_sentences:
+                return tagged_sentences
+            pos = sentence.get('pos')
+            if 'XX' in pos:
                 continue
-            if 'VERB' in sentence.get('pos'):
+            if 'VERB' in pos:
                 continue
             tokens = sentence.get('tokens')
-            #pos = sentence.get('pos')
-            pos = [tag[1] for tag in nltk.pos_tag(tokens)]
             entities = sentence.get('ne')
             if entities and 'parse_error' not in entities.keys():
                 tagged_sentence = []
@@ -53,15 +53,15 @@ def get_tagged_sentences(ontonotes: dict, max_sentences: int = 25000):
                     else:
                         tokens_arr = entity.get('tokens')
                         tag = entity.get('type')
-                        if len(tokens_arr) == 1:
-                            tagged_sentence.append(
-                                (tokens[token], pos[token], tag + "-S"))
-                        elif token == tokens_arr[0]:
+                        #if len(tokens_arr) == 1:
+                            #tagged_sentence.append(
+                                #(tokens[token], pos[token], tag + "-S"))
+                        if token == tokens_arr[0]:
                             tagged_sentence.append(
                                 (tokens[token], pos[token], tag + "-B"))
-                        elif token == tokens_arr[-1]:
-                            tagged_sentence.append(
-                                (tokens[token], pos[token], tag + "-E"))
+                        #elif token == tokens_arr[-1]:
+                            #tagged_sentence.append(
+                                #(tokens[token], pos[token], tag + "-E"))
                         else:
                             tagged_sentence.append(
                                 (tokens[token], pos[token], tag + "-I"))
@@ -81,14 +81,30 @@ def sent2tokens(sent):
     return [token for token, postag, label in sent]
 
 
-ORDINAL_WORDS_NUMBER_RE = r'(?:first|second|third|th)\s*$'
+weekday_pat = re.compile(r"(mon|tues|wednes|thurs|fri|satur|sun)days?", re.IGNORECASE)
+months_pat = re.compile(r'January|February|March|April|May|June|July|August|September|October|November|December', re.IGNORECASE)
+temporal_pat = re.compile(r'now|past|once|present|days?|months?|years?', re.IGNORECASE)
+
+TITLE_RE_PAT = re.compile(r'(Judge|Mr|Mrs|Ms|Miss|Drs?|Profs?|Sens?|Reps?|Attys?|Lt|Col|Gen|Messrs|Govs?|Adm|Rev|Maj|Sgt|Cpl|Pvt|Capt|Ave|Pres|Lieut|Hon|Brig|Co?mdr|Pfc|Spc|Supts?|Det|Mt|Ft|Adj|Adv|Asst|Assoc|Ens|Insp|Mlle|Mme|Msgr|Sfc)\.?', re.IGNORECASE)
+
+ordinalPattern_java = re.compile("(?:(?:first|second|third|fourth|fifth|"+
+                                       "sixth|seventh|eighth|ninth|tenth|"+
+                                       "eleventh|twelfth|thirteenth|"+
+                                       "fourteenth|fifteenth|sixteenth|"+
+                                       "seventeenth|eighteenth|nineteenth|"+
+                                       "twenty|twentieth|thirty|thirtieth|"+
+                                       "forty|fortieth|fifty|fiftieth|"+
+                                       "sixty|sixtieth|seventy|seventieth|"+
+                                       "eighty|eightieth|ninety|ninetieth|"+
+                                       "one|two|three|four|five|six|seven|"+
+                                       "eight|nine|hundred|hundredth)-?)+|[0-9]+(?:st|nd|rd|th)", re.IGNORECASE)
  
 CARDINAL_NUMBER_RE = r'^\s*(?:[+-]?)(?=\d|\.\d)\d*(?:\.\d*)?(?:[Ee](?:[+-]?\d+))?\s*'
  
 ORDINAL_NUMBER_RE  = r'^\s*(?:[+-]?)(?=\d|\.\d)\d*(?:\.\d*)?(?:[Ee](?:[+-]?\d+))?(?:st|nd|rd|th)\s*$'
 
 def isordinal(word):
-    if re.match(ORDINAL_NUMBER_RE, word) or re.match(ORDINAL_WORDS_NUMBER_RE, word):
+    if re.match(ORDINAL_NUMBER_RE, word) or re.match(ordinalPattern_java, word):
         return True
  
     return False
@@ -102,6 +118,14 @@ def iscardinal(word):
 wnpos = lambda e: ('a' if e[0].lower() == 'j' else e[0].lower()) if e[0].lower() in ['n', 'r', 'v'] else 'n'
 wn = nltk.stem.WordNetLemmatizer()
 
+stopwords = nltk.corpus.stopwords.words('english')
+
+def word_shape(word):
+    shape = re.sub(r'[A-Z]', 'X', word)
+    shape = re.sub(r'[a-z]', 'x', shape)
+    return re.sub(r'\d', 'd', shape)
+                   
+
 def word2features(sent, i):
     word = sent[i][0]
     postag = sent[i][1]
@@ -110,20 +134,36 @@ def word2features(sent, i):
         'bias': 1.0,
         'word.lower()': word.lower(),
         'word[-3:]': word[-3:],
-        'word.isupper()': word.isupper(),
+        'word[-2:]': word[-2:],
         'word.istitle()': word.istitle(),
-        'word.isdigit()': word.isdigit(),
+        'word.isdigit()': word.isnumeric(),
         'postag': postag,
-        'word.lemma': wn.lemmatize(word.lower(), wnpos(postag))
+        'word.lemma': wn.lemmatize(word, wnpos(postag)),
+        'postag[:2]': postag[:2],
+        'word:title': True if re.match(TITLE_RE_PAT, word) else False,
+        'word:isordinal': isordinal(word),
+        'word:ismonth': True if re.match(months_pat, word) else False,
+        'word:temporal': True if re.match(temporal_pat, word) else False,
+        'word:shape': word_shape(word),
+        'word:stopword': word.lower() in stopwords,
     }
+            
     if i > 0:
         word1 = sent[i - 1][0]
         postag1 = sent[i - 1][1]
         features.update({
             '-1:word.lower()': word1.lower(),
+            '-1:word.lemma': wn.lemmatize(word1, wnpos(postag1)),
             '-1:word.istitle()': word1.istitle(),
-            '-1:word.isupper()': word1.isupper(),
             '-1:postag': postag1,
+            '-1:word[-3:]': word1[-3:],
+            '-1:word[-2:]': word1[-2:],
+            '-1:postag[:2]': postag1[:2],
+            '-1:word:title': True if re.match(TITLE_RE_PAT, word1) else False,
+            '-1:word:isordinal': isordinal(word1),
+            '-1:word:posbigram': postag1 + ' ' + sent[i][1],
+            '-1:word:shape': word_shape(word1),
+            '-1:word:stopword': word1.lower() in stopwords,
         })
     else:
         features['BOS'] = True
@@ -133,17 +173,83 @@ def word2features(sent, i):
         postag1 = sent[i + 1][1]
         features.update({
             '+1:word.lower()': word1.lower(),
+            '+1:word.lemma': wn.lemmatize(word1, wnpos(postag1)),
             '+1:word.istitle()': word1.istitle(),
-            '+1:word.isupper()': word1.isupper(),
             '+1:postag': postag1,
+            '+1:word[-3:]': word1[-3:],
+            '+1:word[-2:]': word1[-2:],
+            '+1:postag[:2]': postag1[:2],
+            '+1:word:posbigram': sent[i][1] + ' ' + postag1,
+            '+1:word:shape': word_shape(word1),
+            '+1:word:stopword': word1.lower() in stopwords,
         })
     else:
         features['EOS'] = True
 
+    if i > 1:
+        word2 = sent[i - 2][0]
+        postag2 = sent[i - 2][1]
+        features.update({
+            '-2:word.istitle()': word2.istitle(),
+            '-2:postag': postag2,
+            '-2:postag[:2]': postag2[:2],
+            '-2:word:posbigram': postag2 + ' ' + sent[i - 1][1],
+            '-2:word:shape': word_shape(word2)
+        })
+
+    if i < len(sent) - 2:
+        word2 = sent[i + 2][0]
+        postag2 = sent[i + 2][1]
+        features.update({
+            '+2:word.istitle()': word2.istitle(),
+            '+2:postag': postag2,
+            '+2:postag[:2]': postag2[:2],
+            '+2:word:posbigram': sent[i + 1][1] + ' ' + postag2,
+            '+2:word:shape': word_shape(word2)
+        })
+
+        
+    # if i > 1:
+    #     word2 = sent[i - 2][0]
+    #     postag2 = sent[i - 2][1]
+    #     features.update({
+    #         '-2:word.lemma': wn.lemmatize(word2.lower(), wnpos(postag2)),
+    #         '-2:word.istitle()': word2.istitle(),
+    #         '-2:word.isupper()': word2.isupper(),
+    #         '-2:postag': postag2,
+    #         '-2:word[-3:]': word2[-3:],
+    #         '-2:word[-2:]': word2[-2:],
+    #         '-2:postag[:2]': postag2[:2],
+    #         '-2:word:title': True if re.match(TITLE_RE_PAT, word2) else False,
+    #         '-2:word:isordinal': isordinal(word2),
+    #         '-2:word:posbigram': postag2 + ' ' + sent[i - 1][1],
+    #         '-2:word:shape': word_shape(word2),
+    #         '-2:word:stopword': word2.lower() in stopwords,
+    #         '-2:word[:1]': word2[:1],
+    #         '-2:word[:2]': word2[:2],
+    #     })
+    # if i < len(sent) - 2:
+    #     word2 = sent[i + 2][0]
+    #     postag2 = sent[i + 2][1]
+    #     features.update({
+    #         '+2:word.lemma': wn.lemmatize(word2.lower(), wnpos(postag2)),
+    #         '+2:word.istitle()': word2.istitle(),
+    #         '+2:word.isupper()': word2.isupper(),
+    #         '+2:postag': postag2,
+    #         '+2:word[-3:]': word2[-3:],
+    #         '+2:word[-2:]': word2[-2:],
+    #         '+2:postag[:2]': postag2[:2],
+    #         '+2:word:posbigram': sent[i + 1][1] + ' ' + postag2,
+    #         '+2:word:shape': word_shape(word2),
+    #         '+2:word:stopword': word2.lower() in stopwords,
+    #         '+2:word[:1]': word2[:1],
+    #         '+2:word[:2]': word2[:2],
+    #     })
+
     return features
 
 
-def load_dataset(ontonotes_file, max_sentences=10000):
+def load_dataset(ontonotes_file, max_sentences=20000):
     # load parsed ontonotes dataset
     dataset = codecs.open(ontonotes_file, 'r', 'utf-8',
                           errors='replace').read()
@@ -151,13 +257,7 @@ def load_dataset(ontonotes_file, max_sentences=10000):
     return get_tagged_sentences(ontonotes, max_sentences)
 
 
-def extract_entities(model, chapter):
-    chapter = codecs.open(chapter, 'r', 'utf-8',
-                      errors='replace').read()
-    chapter = re.sub(r'\r\n', ' ', chapter)
-    chapter = re.sub(r'[’‘]', ' ', chapter)
-
-    chapter_sents = nltk.sent_tokenize(chapter)
+def extract_entities(model, chapter_sents):
     chapter_word_tokens = [nltk.word_tokenize(sent) for sent in chapter_sents]
 
     pos_tags = [nltk.pos_tag(word) for word in chapter_word_tokens]
@@ -180,56 +280,79 @@ def chunk_entities(entities):
     for entity_idx in range(len(entities)):
         flat_ent = ['', '', '']
         if entities[entity_idx][2].endswith('-B'):
+            if entities[entity_idx][0].startswith('\''):
+                continue
             flat_ent[0] = entities[entity_idx][0]
             flat_ent[1] = entities[entity_idx][1]
             flat_ent[2] = re.sub('-B$', '', entities[entity_idx][2])
             i = entity_idx + 1
-            while i < len(entities) and (entities[i][2].endswith('-I')
-                                         or entities[i][2].endswith('-E')):
+            while i < len(entities) and entities[i][2].endswith('-I'):
                 flat_ent[0] = flat_ent[0] + ' ' + entities[i][0]
                 flat_ent[1] = flat_ent[1] + ' ' + entities[i][1]
                 i += 1
             if (flat_ent[0], flat_ent[2]) in [(x[0], x[2]) for x in chunked]:
                 continue
-            chunked.append(tuple(flat_ent))
-        if entities[entity_idx][2].endswith('-S'):
-            flat_ent[0] = entities[entity_idx][0]
-            flat_ent[1] = entities[entity_idx][1]
-            flat_ent[2] = re.sub('-S$', '', entities[entity_idx][2])
-            if (flat_ent[0], flat_ent[2]) in [(x[0], x[2]) for x in chunked]:
-                continue
-            chunked.append(tuple(flat_ent))
+            if not '\'' in flat_ent[0] and not flat_ent[0].endswith('.'):
+                chunked.append(tuple(flat_ent))
     return chunked
 
 def exec_ner( file_chapter = None, ontonotes_file = None ) :
 
     # INSERT CODE TO TRAIN A CRF NER MODEL TO TAG THE CHAPTER OF TEXT (subtask 3)
 
-    sentences = load_dataset(ontonotes_file = ontonotes_file, max_sentences = 10000)
+    sentences = load_dataset(ontonotes_file = ontonotes_file, max_sentences = 30000)
     
     X_train = [sent2features(s) for s in sentences]
     y_train = [sent2labels(s) for s in sentences]
 
     crf = sklearn_crfsuite.CRF(
         algorithm='lbfgs',
-        c1=0.04100687805893257,
-		c2=0.039222512020706174,
-        max_iterations=100,
+        c1=0.3,
+        c2=0.05,
+        max_iterations=120,
         all_possible_transitions=True,
     )
     crf.fit(X_train, y_train)
 
     # USING NER MODEL AND REGEX GENERATE A SET OF BOOK CHARACTERS AND FILTERED SET OF NE TAGS (subtask 4)
-    entities = extract_entities(crf, file_chapter)
+    chapter = codecs.open(file_chapter, 'r', 'utf-8',
+                      errors='replace').read()
+
+    chapter = re.sub('\r\n', '\n', chapter)
+    chapter = re.sub('(?<!\n)\n(?!\n)', ' ', chapter)
+
+    chapter_sents = []
+    for s in nltk.sent_tokenize(chapter):
+        s = re.sub(r'[’‘]', '\'', s)
+        if '\n\n' in s:
+            for sp in s.split('\n\n'):
+                chapter_sents.append(sp.strip('\n'))
+        else: chapter_sents.append(s)
+
+    chapter_sents = chapter_sents[2:]
+    entities = extract_entities(crf, chapter_sents)
     chunked_entities = chunk_entities(entities)
+
+    ner_people = [e[0] for e in chunked_entities if e[2] == 'PERSON']
+
+    title_name_pat  = re.compile(r'(Judge|Mr|Mrs|Ms|Miss|Drs?|Profs?|Sens?|Reps?|Attys?|Lt|Col|Gen|Messrs|Govs?|Adm|Rev|Maj|Sgt|Cpl|Pvt|Capt|Ave|Pres|Lieut|Hon|Brig|Co?mdr|Pfc|Spc|Supts?|Det|Mt|Ft|Adj|Adv|Asst|Assoc|Ens|Insp|Mlle|Mme|Msgr|Sfc)\.? (?!You)(\b[A-Z][a-z]+[ -]?(?![a-z]|\d))+')
+
+    for sentence in chapter_sents:
+        match = re.search(title_name_pat, sentence)
+        if match:
+            ne = match.group(0).strip('- ').lower()
+            if ne not in ner_people:
+                ner_people.append(ne)
 
     dictNE = {
             "CARDINAL": [e[0] for e in chunked_entities if e[2] == 'CARDINAL'],
             "ORDINAL": [e[0] for e in chunked_entities if e[2] == 'ORDINAL'],
             "DATE": [e[0] for e in chunked_entities if e[2] == 'DATE'],
             "NORP": [e[0] for e in chunked_entities if e[2] == 'NORP'],
-            "PERSON": [e[0] for e in chunked_entities if e[2] == 'PERSON']
+            "PERSON": ner_people
         }
+
+    logger.info('Script execution finished.')
 
     # DO NOT CHANGE THE BELOW CODE WHICH WILL SERIALIZE THE ANSWERS FOR THE AUTOMATED TEST HARNESS TO LOAD AND MARK
 
@@ -314,11 +437,22 @@ def exec_regex_questions( file_chapter = None ) :
 
     # INSERT CODE TO USE REGEX TO LIST ALL QUESTIONS IN THE CHAPTER OF TEXT (subtask 2)
     text = codecs.open(file_chapter,"r",encoding="utf-8").read()
-    clean = re.sub('\r\n', ' ', text)
+    #clean = re.sub('\r\n', ' ', text)
+
+    #questions = re.findall(r'((?<=‘)[A-Za-z][^.?!]*\?(?=’)|[A-Z][^.?!]*\?)', clean)
+    #questions = [re.sub(r'.*\s‘(?!.*’)', '', q).strip() for q in questions]
 
     #questions = re.findall(r'[A-Z][^.?!]*\?', clean)
-    questions = re.findall(r'[A-Z][^.?!]*\?', clean)
-    questions = [re.sub(r'.*\s‘', '', q).strip() for q in questions]
+    #questions = [re.sub(r'.*\s‘', '', q).strip() for q in questions]
+
+    clean = re.sub('\r\n', '\n', text)
+    clean = re.sub('(?<!\n)\n(?!\n)', ' ', clean)
+    
+    questions = re.findall(r'(?:(?<=‘)|(?<= )|(?<=“)|(?<=\n))([A-Z][^.?!\n]*\?|[A-Z][^.?!\n]*\b[A-Z][a-z]\.[^.?!\n]*\?)', clean)
+    for q in questions:
+        match = re.search(r'(?<!^)(?<=‘)([A-Za-z][^.?!]*\?|[A-Z][a-z][^.?!]*\b[A-Z][a-z]\.[^.?!]*\?)', q)
+        if match:
+            questions.append(match.group(0))
 
     setQuestions = set(questions)
 
