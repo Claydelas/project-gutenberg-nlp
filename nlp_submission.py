@@ -38,6 +38,7 @@ def get_tagged_sentences(ontonotes: dict, max_sentences: int = 25000):
             if 'VERB' in pos:
                 continue
             tokens = sentence.get('tokens')
+            pos = [tag[1] for tag in nltk.pos_tag(tokens)]
             entities = sentence.get('ne')
             if entities and 'parse_error' not in entities.keys():
                 tagged_sentence = []
@@ -124,7 +125,6 @@ def word_shape(word):
     shape = re.sub(r'[A-Z]', 'X', word)
     shape = re.sub(r'[a-z]', 'x', shape)
     return re.sub(r'\d', 'd', shape)
-                   
 
 def word2features(sent, i):
     word = sent[i][0]
@@ -135,11 +135,12 @@ def word2features(sent, i):
         'word.lower()': word.lower(),
         'word[-3:]': word[-3:],
         'word[-2:]': word[-2:],
+        'word[-1:]': word[-1:],
         'word.istitle()': word.istitle(),
         'word.isdigit()': word.isnumeric(),
         'postag': postag,
-        'word.lemma': wn.lemmatize(word, wnpos(postag)),
         'postag[:2]': postag[:2],
+        'word.lemma': wn.lemmatize(word, wnpos(postag)),
         'word:title': True if re.match(TITLE_RE_PAT, word) else False,
         'word:isordinal': isordinal(word),
         'word:ismonth': True if re.match(months_pat, word) else False,
@@ -147,21 +148,19 @@ def word2features(sent, i):
         'word:shape': word_shape(word),
         'word:stopword': word.lower() in stopwords,
     }
-            
     if i > 0:
         word1 = sent[i - 1][0]
         postag1 = sent[i - 1][1]
         features.update({
             '-1:word.lower()': word1.lower(),
-            '-1:word.lemma': wn.lemmatize(word1, wnpos(postag1)),
             '-1:word.istitle()': word1.istitle(),
-            '-1:postag': postag1,
             '-1:word[-3:]': word1[-3:],
             '-1:word[-2:]': word1[-2:],
+            '-1:word[-1:]': word1[-1:],
+            '-1:postag': postag1,
             '-1:postag[:2]': postag1[:2],
             '-1:word:title': True if re.match(TITLE_RE_PAT, word1) else False,
             '-1:word:isordinal': isordinal(word1),
-            '-1:word:posbigram': postag1 + ' ' + sent[i][1],
             '-1:word:shape': word_shape(word1),
             '-1:word:stopword': word1.lower() in stopwords,
         })
@@ -173,80 +172,110 @@ def word2features(sent, i):
         postag1 = sent[i + 1][1]
         features.update({
             '+1:word.lower()': word1.lower(),
-            '+1:word.lemma': wn.lemmatize(word1, wnpos(postag1)),
             '+1:word.istitle()': word1.istitle(),
             '+1:postag': postag1,
-            '+1:word[-3:]': word1[-3:],
-            '+1:word[-2:]': word1[-2:],
             '+1:postag[:2]': postag1[:2],
-            '+1:word:posbigram': sent[i][1] + ' ' + postag1,
             '+1:word:shape': word_shape(word1),
-            '+1:word:stopword': word1.lower() in stopwords,
         })
     else:
         features['EOS'] = True
 
-    if i > 1:
-        word2 = sent[i - 2][0]
-        postag2 = sent[i - 2][1]
-        features.update({
-            '-2:word.istitle()': word2.istitle(),
-            '-2:postag': postag2,
-            '-2:postag[:2]': postag2[:2],
-            '-2:word:posbigram': postag2 + ' ' + sent[i - 1][1],
-            '-2:word:shape': word_shape(word2)
-        })
+    return features                 
 
-    if i < len(sent) - 2:
-        word2 = sent[i + 2][0]
-        postag2 = sent[i + 2][1]
-        features.update({
-            '+2:word.istitle()': word2.istitle(),
-            '+2:postag': postag2,
-            '+2:postag[:2]': postag2[:2],
-            '+2:word:posbigram': sent[i + 1][1] + ' ' + postag2,
-            '+2:word:shape': word_shape(word2)
-        })
+# def word2features(sent, i):
+#     word = sent[i][0]
+#     postag = sent[i][1]
 
+#     features = {
+#         'bias': 1.0,
+#         'word.lower()': word.lower(),
+#         'word[-3:]': word[-3:],
+#         'word[-2:]': word[-2:],
+#         'word.isupper()': word.isupper(),
+#         'word.istitle()': word.istitle(),
+#         'word.isdigit()': word.isnumeric(),
+#         'postag': postag,
+#         'word.lemma': wn.lemmatize(word.lower(), wnpos(postag)),
+#         'postag[:2]': postag[:2],
+#         'word:title': True if re.match(TITLE_RE_PAT, word) else False,
+#         'word:isordinal': isordinal(word),
+#         'word:ismonth': True if re.match(months_pat, word) else False,
+#         'word:temporal': True if re.match(temporal_pat, word) else False,
+#         'word:shape': word_shape(word)
+#     }
+            
+#     if i > 0:
+#         word1 = sent[i - 1][0]
+#         postag1 = sent[i - 1][1]
+#         features.update({
+#             '-1:word.lower()': word1.lower(),
+#             '-1:word.lemma': wn.lemmatize(word1.lower(), wnpos(postag1)),
+#             '-1:word.istitle()': word1.istitle(),
+#             '-1:word.isupper()': word1.isupper(),
+#             '-1:postag': postag1,
+#             '-1:word[-3:]': word1[-3:],
+#             '-1:word[-2:]': word1[-2:],
+#             '-1:postag[:2]': postag1[:2],
+#             '-1:word:title': True if re.match(TITLE_RE_PAT, word1) else False,
+#             '-1:word:isordinal': isordinal(word1),
+#             '-1:word:posbigram': postag1 + ' ' + sent[i][1],
+#             '-1:word:shape': word_shape(word1)
+#         })
+#     else:
+#         features['BOS'] = True
+
+#     if i < len(sent) - 1:
+#         word1 = sent[i + 1][0]
+#         postag1 = sent[i + 1][1]
+#         features.update({
+#             '+1:word.lower()': word1.lower(),
+#             '+1:word.lemma': wn.lemmatize(word1.lower(), wnpos(postag1)),
+#             '+1:word.istitle()': word1.istitle(),
+#             '+1:word.isupper()': word1.isupper(),
+#             '+1:postag': postag1,
+#             '+1:word[-3:]': word1[-3:],
+#             '+1:word[-2:]': word1[-2:],
+#             '+1:postag[:2]': postag1[:2],
+#             '+1:word:posbigram': sent[i][1] + ' ' + postag1,
+#             '+1:word:shape': word_shape(word1)
+#         })
+#     else:
+#         features['EOS'] = True
         
-    # if i > 1:
-    #     word2 = sent[i - 2][0]
-    #     postag2 = sent[i - 2][1]
-    #     features.update({
-    #         '-2:word.lemma': wn.lemmatize(word2.lower(), wnpos(postag2)),
-    #         '-2:word.istitle()': word2.istitle(),
-    #         '-2:word.isupper()': word2.isupper(),
-    #         '-2:postag': postag2,
-    #         '-2:word[-3:]': word2[-3:],
-    #         '-2:word[-2:]': word2[-2:],
-    #         '-2:postag[:2]': postag2[:2],
-    #         '-2:word:title': True if re.match(TITLE_RE_PAT, word2) else False,
-    #         '-2:word:isordinal': isordinal(word2),
-    #         '-2:word:posbigram': postag2 + ' ' + sent[i - 1][1],
-    #         '-2:word:shape': word_shape(word2),
-    #         '-2:word:stopword': word2.lower() in stopwords,
-    #         '-2:word[:1]': word2[:1],
-    #         '-2:word[:2]': word2[:2],
-    #     })
-    # if i < len(sent) - 2:
-    #     word2 = sent[i + 2][0]
-    #     postag2 = sent[i + 2][1]
-    #     features.update({
-    #         '+2:word.lemma': wn.lemmatize(word2.lower(), wnpos(postag2)),
-    #         '+2:word.istitle()': word2.istitle(),
-    #         '+2:word.isupper()': word2.isupper(),
-    #         '+2:postag': postag2,
-    #         '+2:word[-3:]': word2[-3:],
-    #         '+2:word[-2:]': word2[-2:],
-    #         '+2:postag[:2]': postag2[:2],
-    #         '+2:word:posbigram': sent[i + 1][1] + ' ' + postag2,
-    #         '+2:word:shape': word_shape(word2),
-    #         '+2:word:stopword': word2.lower() in stopwords,
-    #         '+2:word[:1]': word2[:1],
-    #         '+2:word[:2]': word2[:2],
-    #     })
+#     if i > 1:
+#         word2 = sent[i - 2][0]
+#         postag2 = sent[i - 2][1]
+#         features.update({
+#             '-2:word.lower()': word2.lower(),
+#             '-2:word.lemma': wn.lemmatize(word2.lower(), wnpos(postag2)),
+#             '-2:word.istitle()': word2.istitle(),
+#             '-2:word.isupper()': word2.isupper(),
+#             '-2:postag': postag2,
+#             '-2:word[-3:]': word2[-3:],
+#             '-2:word[-2:]': word2[-2:],
+#             '-2:postag[:2]': postag2[:2],
+#             '-2:word:title': True if re.match(TITLE_RE_PAT, word2) else False,
+#             '-2:word:isordinal': isordinal(word2),
+#             '-2:word:posbigram': postag2 + ' ' + sent[i - 1][1],
+#             '-2:word:shape': word_shape(word2)
+#         })
+#     if i < len(sent) - 2:
+#         word2 = sent[i + 2][0]
+#         postag2 = sent[i + 2][1]
+#         features.update({
+#             '+2:word.lower()': word2.lower(),
+#             '+2:word.lemma': wn.lemmatize(word2.lower(), wnpos(postag2)),
+#             '+2:word.istitle()': word2.istitle(),
+#             '+2:word.isupper()': word2.isupper(),
+#             '+2:postag': postag2,
+#             '+2:word[-3:]': word2[-3:],
+#             '+2:word[-2:]': word2[-2:],
+#             '+2:postag[:2]': postag2[:2],
+#             '+2:word:posbigram': sent[i + 1][1] + ' ' + postag2,
+#             '+2:word:shape': word_shape(word2)
+#         })
 
-    return features
+#     return features
 
 
 def load_dataset(ontonotes_file, max_sentences=20000):
@@ -254,6 +283,7 @@ def load_dataset(ontonotes_file, max_sentences=20000):
     dataset = codecs.open(ontonotes_file, 'r', 'utf-8',
                           errors='replace').read()
     ontonotes = json.loads(dataset)
+    del dataset
     return get_tagged_sentences(ontonotes, max_sentences)
 
 
@@ -300,16 +330,18 @@ def exec_ner( file_chapter = None, ontonotes_file = None ) :
 
     # INSERT CODE TO TRAIN A CRF NER MODEL TO TAG THE CHAPTER OF TEXT (subtask 3)
 
-    sentences = load_dataset(ontonotes_file = ontonotes_file, max_sentences = 30000)
+    sentences = load_dataset(ontonotes_file = ontonotes_file, max_sentences = 33000)
     
     X_train = [sent2features(s) for s in sentences]
     y_train = [sent2labels(s) for s in sentences]
 
+    del sentences
+
     crf = sklearn_crfsuite.CRF(
         algorithm='lbfgs',
-        c1=0.3,
-        c2=0.05,
-        max_iterations=120,
+        c1=0.07100687805893257,
+        c2=0.039222512020706174,
+        max_iterations=100,
         all_possible_transitions=True,
     )
     crf.fit(X_train, y_train)
@@ -425,6 +457,9 @@ def exec_regex_toc( file_book = None ) :
             else: headings.append((m.group(1), '')) # Chapter X NO_TITLE
 
     dictTOC = {heading[0]:heading[1] for heading in headings}
+    del headings
+    del text
+    del text_split
 
     # DO NOT CHANGE THE BELOW CODE WHICH WILL SERIALIZE THE ANSWERS FOR THE AUTOMATED TEST HARNESS TO LOAD AND MARK
 
@@ -455,6 +490,10 @@ def exec_regex_questions( file_chapter = None ) :
             questions.append(match.group(0))
 
     setQuestions = set(questions)
+
+    del text
+    del clean
+    del questions
 
     # hardcoded output to show exactly what is expected to be serialized
     # setQuestions = set([
